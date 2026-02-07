@@ -25,26 +25,22 @@ NOTAS = [
     {
         "id": "VTA-0001",
         "cliente": "Brenda",
-        "telefono": "5578412147",
-        "prioridad": "ALTA",
-        "estado": "PENDIENTE",
-        "empacador": None
-    },
-    {
-        "id": "VTA-0002",
-        "cliente": "Carlos",
-        "telefono": "5587459632",
-        "prioridad": "MEDIA",
         "estado": "EN_PROCESO",
-        "empacador": "empacador1"
-    },
-    {
-        "id": "VTA-0003",
-        "cliente": "María",
-        "telefono": "5512349876",
-        "prioridad": "BAJA",
-        "estado": "INCOMPLETA",
-        "empacador": None
+        "empacador": "empacador1",
+        "productos": [
+            {
+                "codigo": "HIL-ROJO-123",
+                "color": "ROJO",
+                "pz_requeridas": 3,
+                "pz_empacadas": 0
+            },
+            {
+                "codigo": "HIL-AZUL-456",
+                "color": "AZUL",
+                "pz_requeridas": 1,
+                "pz_empacadas": 0
+            }
+        ]
     }
 ]
 
@@ -201,6 +197,96 @@ def resetear_nota(nota_id):
             nota["empacador"] = None
             nota["estado"] = "PENDIENTE"
             return jsonify(nota)
+
+    return jsonify({"error": "Nota no encontrada"}), 404
+
+@app.route("/notas/<nota_id>/scan", methods=["POST"])
+def escanear_producto(nota_id):
+    auth = validar_token(request)
+
+    if not auth:
+        return jsonify({"error": "No autorizado"}), 401
+
+    codigo_escaneado = request.json.get("codigo")
+
+    if not codigo_escaneado:
+        return jsonify({"error": "Código vacío"}), 400
+
+    for nota in NOTAS:
+        if nota["id"] == nota_id:
+
+            for prod in nota["productos"]:
+                if prod["codigo"] == codigo_escaneado:
+
+                    if prod["pz_empacadas"] >= prod["pz_requeridas"]:
+                        return jsonify({
+                            "error": "Piezas ya completas",
+                            "codigo": codigo_escaneado
+                        }), 409
+
+                    prod["pz_empacadas"] += 1
+
+                    return jsonify({
+                        "ok": True,
+                        "producto": prod
+                    })
+
+            return jsonify({
+                "error": "Código no pertenece a la nota",
+                "codigo": codigo_escaneado
+            }), 404
+
+    return jsonify({"error": "Nota no encontrada"}), 404
+
+@app.route("/notas/<nota_id>/producto/ajustar", methods=["POST"])
+def ajustar_producto(nota_id):
+    auth = validar_token(request)
+
+    if not auth:
+        return jsonify({"error": "No autorizado"}), 401
+
+    data = request.json
+    codigo = data.get("codigo")
+    cantidad = data.get("cantidad")
+
+    if not codigo or cantidad is None:
+        return jsonify({"error": "Datos incompletos"}), 400
+
+    if not isinstance(cantidad, int):
+        return jsonify({"error": "Cantidad debe ser entera"}), 400
+
+    for nota in NOTAS:
+        if nota["id"] == nota_id:
+
+            for prod in nota["productos"]:
+                if prod["codigo"] == codigo:
+
+                    nuevo_total = prod["pz_empacadas"] + cantidad
+
+                    if nuevo_total < 0:
+                        return jsonify({
+                            "error": "No puede ser menor a 0",
+                            "actual": prod["pz_empacadas"]
+                        }), 409
+
+                    if nuevo_total > prod["pz_requeridas"]:
+                        return jsonify({
+                            "error": "Excede piezas requeridas",
+                            "requeridas": prod["pz_requeridas"],
+                            "actual": prod["pz_empacadas"]
+                        }), 409
+
+                    prod["pz_empacadas"] = nuevo_total
+
+                    return jsonify({
+                        "ok": True,
+                        "producto": prod
+                    })
+
+            return jsonify({
+                "error": "Producto no pertenece a la nota",
+                "codigo": codigo
+            }), 404
 
     return jsonify({"error": "Nota no encontrada"}), 404
 
