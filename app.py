@@ -3,6 +3,28 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # =========================
+# VALIDAR TOKEN
+# =========================
+def validar_token(req):
+    auth = req.headers.get("Authorization")
+
+    if not auth:
+        return None
+
+    if not auth.startswith("Bearer "):
+        return None
+
+    token = auth.replace("Bearer ", "")
+
+    # 🔒 tokens válidos (por ahora fijos)
+    tokens_validos = {
+        "token-empacador1": "empacador1",
+        "token-admin": "admin"
+    }
+
+    return tokens_validos.get(token)
+
+# =========================
 # USUARIOS (TEMPORAL)
 # =========================
 USUARIOS = {
@@ -54,6 +76,15 @@ def login():
 # =========================
 @app.route("/notas-pagadas", methods=["GET"])
 def notas_pagadas():
+
+
+    usuario = validar_token(request)
+
+    if not usuario:
+        return jsonify({
+            "error": "No autorizado"
+        }), 401
+
     notas = [
         {
             "id": "VTA-0001",
