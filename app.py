@@ -1,7 +1,10 @@
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-
+# =========================
+# HISTORIAL DE ERRORES
+# =========================
+ERRORES_SCAN = []
 # =========================
 # USUARIOS (TEMPORAL)
 # =========================
@@ -72,6 +75,35 @@ def validar_token(req):
 # =========================
 # HOME
 # =========================
+
+def evaluar_estado_nota(nota):
+    total = 0
+    requeridas = 0
+
+    for p in nota["productos"]:
+        total += p["pz_empacadas"]
+        requeridas += p["pz_requeridas"]
+
+    if total == 0:
+        nota["estado"] = "EN_PROCESO"
+    elif total < requeridas:
+        nota["estado"] = "INCOMPLETA"
+    else:
+        nota["estado"] = "COMPLETA"
+
+
+from datetime import datetime
+
+def registrar_error(nota_id, codigo, empacador, motivo):
+    ERRORES_SCAN.append({
+        "nota_id": nota_id,
+        "codigo": codigo,
+        "empacador": empacador,
+        "motivo": motivo,
+        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+
 @app.route("/")
 def home():
     return {"status": "Hilorama backend activo"}
@@ -166,6 +198,10 @@ def cambiar_estado(nota_id):
 
     for nota in NOTAS:
         if nota["id"] == nota_id:
+
+            if nota["empacador"] != auth["usuario"] and auth["rol"] != "ADMIN":
+                return jsonify({"error": "No es tu nota"}), 403
+            
             estado_actual = nota["estado"]
 
             # 🔒 reglas de transición
@@ -215,27 +251,60 @@ def escanear_producto(nota_id):
     for nota in NOTAS:
         if nota["id"] == nota_id:
 
+            # 🔒 solo el empacador asignado
+            if nota["empacador"] != auth["usuario"]:
+                return jsonify({"error": "No es tu nota"}), 403
+
+            # 🔒 bloquear si ya está completa
+            if nota["estado"] == "COMPLETA":
+                registrar_error(
+                    nota_id,
+                    codigo_escaneado,
+                    auth["usuario"],
+                    "NOTA_COMPLETA"
+                )
+                return jsonify({
+                    "error": "La nota ya está completa"
+                }), 409
+
             for prod in nota["productos"]:
                 if prod["codigo"] == codigo_escaneado:
 
                     if prod["pz_empacadas"] >= prod["pz_requeridas"]:
+                        registrar_error(
+                            nota_id,
+                            codigo_escaneado,
+                            auth["usuario"],
+                            "PIEZAS_COMPLETAS"
+                        )
+
+
+
                         return jsonify({
                             "error": "Piezas ya completas",
                             "codigo": codigo_escaneado
                         }), 409
 
                     prod["pz_empacadas"] += 1
+                    evaluar_estado_nota(nota)
 
                     return jsonify({
                         "ok": True,
-                        "producto": prod
+                        "producto": prod,
+                        "estado_nota": nota["estado"]
                     })
 
+            registrar_error(
+                nota_id,
+                codigo_escaneado,
+                auth["usuario"],
+                "NO_PERTENECE"
+            )
             return jsonify({
                 "error": "Código no pertenece a la nota",
                 "codigo": codigo_escaneado
             }), 404
-
+        
     return jsonify({"error": "Nota no encontrada"}), 404
 
 @app.route("/notas/<nota_id>/producto/ajustar", methods=["POST"])
@@ -258,6 +327,16 @@ def ajustar_producto(nota_id):
     for nota in NOTAS:
         if nota["id"] == nota_id:
 
+            # 🔒 solo empacador asignado
+            if nota["empacador"] != auth["usuario"]:
+                return jsonify({"error": "No es tu nota"}), 403
+
+            # 🔒 bloquear si está completa
+            if nota["estado"] == "COMPLETA":
+                return jsonify({
+                    "error": "La nota ya está completa"
+                }), 409
+
             for prod in nota["productos"]:
                 if prod["codigo"] == codigo:
 
@@ -277,16 +356,46 @@ def ajustar_producto(nota_id):
                         }), 409
 
                     prod["pz_empacadas"] = nuevo_total
+                    evaluar_estado_nota(nota)
 
                     return jsonify({
                         "ok": True,
-                        "producto": prod
+                        "producto": prod,
+                        "estado_nota": nota["estado"]
                     })
 
             return jsonify({
                 "error": "Producto no pertenece a la nota",
                 "codigo": codigo
             }), 404
+
+    return jsonify({"error": "Nota no encontrada"}), 404
+
+@app.route("/errores-scan", methods=["GET"])
+def ver_errores_scan():
+    auth = validar_token(request)
+
+    if not auth or auth["rol"] != "ADMIN":
+        return jsonify({"error": "No autorizado"}), 401
+
+    return jsonify(ERRORES_SCAN)
+
+@app.route("/notas/<nota_id>/progreso", methods=["GET"])
+def progreso_nota(nota_id):
+    auth = validar_token(request)
+    if not auth:
+        return jsonify({"error": "No autorizado"}), 401
+
+    for nota in NOTAS:
+        if nota["id"] == nota_id:
+            total = sum(p["pz_requeridas"] for p in nota["productos"])
+            empacadas = sum(p["pz_empacadas"] for p in nota["productos"])
+
+            return jsonify({
+                "total": total,
+                "empacadas": empacadas,
+                "porcentaje": round((empacadas / total) * 100, 2) if total else 0
+            })
 
     return jsonify({"error": "Nota no encontrada"}), 404
 
