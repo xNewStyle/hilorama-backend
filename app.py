@@ -3,6 +3,52 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # =========================
+# USUARIOS (TEMPORAL)
+# =========================
+USUARIOS = {
+    "empacador1": {
+        "password": "1234",
+        "nombre": "Juan Empacador",
+        "rol": "EMPACADOR"
+    },
+    "admin": {
+        "password": "admin123",
+        "nombre": "Administrador",
+        "rol": "ADMIN"
+    }
+}
+
+# =========================
+# NOTAS (ÚNICA FUENTE)
+# =========================
+NOTAS = [
+    {
+        "id": "VTA-0001",
+        "cliente": "Brenda",
+        "telefono": "5578412147",
+        "prioridad": "ALTA",
+        "estado": "PENDIENTE",
+        "empacador": None
+    },
+    {
+        "id": "VTA-0002",
+        "cliente": "Carlos",
+        "telefono": "5587459632",
+        "prioridad": "MEDIA",
+        "estado": "EN_PROCESO",
+        "empacador": "empacador1"
+    },
+    {
+        "id": "VTA-0003",
+        "cliente": "María",
+        "telefono": "5512349876",
+        "prioridad": "BAJA",
+        "estado": "INCOMPLETA",
+        "empacador": None
+    }
+]
+
+# =========================
 # VALIDAR TOKEN
 # =========================
 def validar_token(req):
@@ -27,23 +73,6 @@ def validar_token(req):
         "rol": USUARIOS[usuario]["rol"]
     }
 
-
-# =========================
-# USUARIOS (TEMPORAL)
-# =========================
-USUARIOS = {
-    "empacador1": {
-        "password": "1234",
-        "nombre": "Juan Empacador",
-        "rol": "EMPACADOR"
-    },
-    "admin": {
-        "password": "admin123",
-        "nombre": "Administrador",
-        "rol": "ADMIN"
-    }
-}
-
 # =========================
 # HOME
 # =========================
@@ -67,7 +96,6 @@ def login():
     if USUARIOS[usuario]["password"] != password:
         return jsonify({"ok": False, "mensaje": "Contraseña incorrecta"}), 401
 
-    # 🔑 token simple (luego lo mejoramos)
     token = f"token-{usuario}"
 
     return jsonify({
@@ -76,13 +104,11 @@ def login():
         "nombre": USUARIOS[usuario]["nombre"]
     })
 
-
 # =========================
 # NOTAS PAGADAS (EMPACADOR)
 # =========================
 @app.route("/notas-pagadas", methods=["GET"])
 def notas_pagadas():
-
     auth = validar_token(request)
 
     if not auth:
@@ -91,32 +117,92 @@ def notas_pagadas():
     if auth["rol"] != "EMPACADOR":
         return jsonify({"error": "Acceso denegado"}), 403
 
-    notas = [
-        {
-            "id": "VTA-0001",
-            "cliente": "Brenda",
-            "telefono": "5578412147",
-            "prioridad": "ALTA",
-            "estado": "PENDIENTE"
-        },
-        {
-            "id": "VTA-0002",
-            "cliente": "Carlos",
-            "telefono": "5587459632",
-            "prioridad": "MEDIA",
-            "estado": "EN_PROCESO"
-        },
-        {
-            "id": "VTA-0003",
-            "cliente": "María",
-            "telefono": "5512349876",
-            "prioridad": "BAJA",
-            "estado": "COMPLETA"
-        }
+    usuario = auth["usuario"]
+
+    notas_empacador = [
+        n for n in NOTAS if n["empacador"] == usuario
     ]
 
-    return jsonify(notas)
+    return jsonify(notas_empacador)
 
+
+
+
+@app.route("/notas/<nota_id>/asignar", methods=["POST"])
+def asignar_nota(nota_id):
+    auth = validar_token(request)
+
+    if not auth:
+        return jsonify({"error": "No autorizado"}), 401
+
+    if auth["rol"] != "ADMIN":
+        return jsonify({"error": "Solo admin puede asignar"}), 403
+
+    empacador = request.json.get("empacador")
+
+    if empacador not in USUARIOS:
+        return jsonify({"error": "Empacador no existe"}), 400
+
+    for nota in NOTAS:
+        if nota["id"] == nota_id:
+            nota["empacador"] = empacador
+            nota["estado"] = "EN_PROCESO"
+            return jsonify(nota)
+
+    return jsonify({"error": "Nota no encontrada"}), 404
+
+# =========================
+# CAMBIAR ESTADO DE NOTA
+# =========================
+@app.route("/notas/<nota_id>/estado", methods=["POST"])
+def cambiar_estado(nota_id):
+    auth = validar_token(request)
+
+    if not auth:
+        return jsonify({"error": "No autorizado"}), 401
+
+    nuevo_estado = request.json.get("estado")
+
+    ESTADOS_VALIDOS = ["PENDIENTE", "EN_PROCESO", "COMPLETA", "INCOMPLETA"]
+
+    if nuevo_estado not in ESTADOS_VALIDOS:
+        return jsonify({"error": "Estado inválido"}), 400
+
+    for nota in NOTAS:
+        if nota["id"] == nota_id:
+            estado_actual = nota["estado"]
+
+            # 🔒 reglas de transición
+            if estado_actual == "PENDIENTE" and nuevo_estado == "EN_PROCESO":
+                nota["estado"] = nuevo_estado
+                return jsonify(nota)
+
+            if estado_actual == "EN_PROCESO" and nuevo_estado in ["COMPLETA", "INCOMPLETA"]:
+                nota["estado"] = nuevo_estado
+                return jsonify(nota)
+
+            if estado_actual == "INCOMPLETA" and nuevo_estado == "EN_PROCESO":
+                nota["estado"] = nuevo_estado
+                return jsonify(nota)
+
+            return jsonify({"error": "Transición no permitida"}), 400
+
+    return jsonify({"error": "Nota no encontrada"}), 404
+
+@app.route("/notas/<nota_id>/reset", methods=["POST"])
+def resetear_nota(nota_id):
+    auth = validar_token(request)
+
+    if not auth or auth["rol"] != "ADMIN":
+        return jsonify({"error": "No autorizado"}), 401
+
+    for nota in NOTAS:
+        if nota["id"] == nota_id:
+            nota["empacador"] = None
+            nota["estado"] = "PENDIENTE"
+            return jsonify(nota)
+
+    return jsonify({"error": "Nota no encontrada"}), 404
 
 # =========================
 # MAIN
