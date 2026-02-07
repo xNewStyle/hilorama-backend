@@ -8,21 +8,25 @@ app = Flask(__name__)
 def validar_token(req):
     auth = req.headers.get("Authorization")
 
-    if not auth:
-        return None
-
-    if not auth.startswith("Bearer "):
+    if not auth or not auth.startswith("Bearer "):
         return None
 
     token = auth.replace("Bearer ", "")
 
-    # 🔒 tokens válidos (por ahora fijos)
     tokens_validos = {
         "token-empacador1": "empacador1",
         "token-admin": "admin"
     }
 
-    return tokens_validos.get(token)
+    usuario = tokens_validos.get(token)
+    if not usuario:
+        return None
+
+    return {
+        "usuario": usuario,
+        "rol": USUARIOS[usuario]["rol"]
+    }
+
 
 # =========================
 # USUARIOS (TEMPORAL)
@@ -30,11 +34,13 @@ def validar_token(req):
 USUARIOS = {
     "empacador1": {
         "password": "1234",
-        "nombre": "Juan Empacador"
+        "nombre": "Juan Empacador",
+        "rol": "EMPACADOR"
     },
     "admin": {
         "password": "admin123",
-        "nombre": "Administrador"
+        "nombre": "Administrador",
+        "rol": "ADMIN"
     }
 }
 
@@ -77,13 +83,13 @@ def login():
 @app.route("/notas-pagadas", methods=["GET"])
 def notas_pagadas():
 
+    auth = validar_token(request)
 
-    usuario = validar_token(request)
+    if not auth:
+        return jsonify({"error": "No autorizado"}), 401
 
-    if not usuario:
-        return jsonify({
-            "error": "No autorizado"
-        }), 401
+    if auth["rol"] != "EMPACADOR":
+        return jsonify({"error": "Acceso denegado"}), 403
 
     notas = [
         {
@@ -110,6 +116,7 @@ def notas_pagadas():
     ]
 
     return jsonify(notas)
+
 
 # =========================
 # MAIN
