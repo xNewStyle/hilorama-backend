@@ -131,7 +131,8 @@ def login():
     return jsonify({
         "ok": True,
         "token": token,
-        "nombre": USUARIOS[usuario]["nombre"]
+        "nombre": USUARIOS[usuario]["nombre"],
+        "rol": USUARIOS[usuario]["rol"]
     })
 
 # =========================
