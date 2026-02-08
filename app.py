@@ -226,14 +226,18 @@ def cambiar_estado(nota_id):
 @app.route("/notas/<nota_id>/reset", methods=["POST"])
 def resetear_nota(nota_id):
     auth = validar_token(request)
-
-    if not auth or auth["rol"] != "ADMIN":
+    if not auth:
         return jsonify({"error": "No autorizado"}), 401
 
     for nota in NOTAS:
         if nota["id"] == nota_id:
-            nota["empacador"] = None
-            nota["estado"] = "PENDIENTE"
+            if nota["empacador"] != auth["usuario"] and auth["rol"] != "ADMIN":
+                return jsonify({"error": "No permitido"}), 403
+
+            for prod in nota["productos"]:
+                prod["pz_empacadas"] = 0
+
+            nota["estado"] = "EN_PROCESO"
             return jsonify(nota)
 
     return jsonify({"error": "Nota no encontrada"}), 404
