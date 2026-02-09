@@ -5,6 +5,8 @@ ruta_sistema = r"C:\Users\jorge\OneDrive\Escritorio\Hilorama"
 sys.path.append(ruta_sistema)
 
 from almacen_api import obtener_producto_por_codigo
+from almacen_api import obtener_producto_por_codigo_barras
+
 
 
 
@@ -265,6 +267,22 @@ def escanear_producto(nota_id):
 
     codigo_escaneado = request.json.get("codigo")
 
+    producto_real = obtener_producto_por_codigo_barras(codigo_escaneado)
+
+    if not producto_real:
+        registrar_error(
+            nota_id,
+            codigo_escaneado,
+            auth["usuario"],
+            "NO_EXISTE_EN_ALMACEN"
+        )
+        return jsonify({
+            "error": "Código no existe en almacén"
+        }), 404
+
+    codigo_interno = producto_real["codigo"]
+
+
     if not codigo_escaneado:
         return jsonify({"error": "Código vacío"}), 400
 
@@ -288,7 +306,8 @@ def escanear_producto(nota_id):
                 }), 409
 
             for prod in nota["productos"]:
-                if prod["codigo"] == codigo_escaneado:
+                if prod["codigo"] == codigo_interno:
+
 
                     if prod["pz_empacadas"] >= prod["pz_requeridas"]:
                         registrar_error(
