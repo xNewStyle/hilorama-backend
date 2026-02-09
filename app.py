@@ -1,14 +1,5 @@
-import sys
-import os
 
-ruta_sistema = r"C:\Users\jorge\OneDrive\Escritorio\Hilorama"
-sys.path.append(ruta_sistema)
-
-from almacen_api import obtener_producto_por_codigo
-from almacen_api import obtener_producto_por_codigo_barras
-
-
-
+from core.almacen_api import obtener_producto_por_codigo_barras
 
 from flask_cors import CORS
 from flask import Flask, request, jsonify
