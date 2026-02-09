@@ -49,20 +49,15 @@ NOTAS = [
         "empacador": "empacador1",
         "productos": [
             {
-                "codigo": "HIL-ROJO-123",
-                "color": "ROJO",
+                "codigo": "55",
+                "color": "BLANCO",
                 "pz_requeridas": 3,
-                "pz_empacadas": 0
-            },
-            {
-                "codigo": "HIL-AZUL-456",
-                "color": "AZUL",
-                "pz_requeridas": 1,
                 "pz_empacadas": 0
             }
         ]
     }
 ]
+
 
 # =========================
 # VALIDAR TOKEN
